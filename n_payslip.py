@@ -1,0 +1,261 @@
+import openpyxl
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+import sys
+import re
+
+DEFAULT_EXCEL_FILE = r'D:\Projects\PaySlipGen\payroll_data.xlsx'
+DEFAULT_OUTPUT_PDF = r'D:\Projects\PaySlipGen\payslips.pdf'
+
+# ── Column header keywords ──────────────────────────────────────────────────
+# Each entry: internal_key -> list of keywords that must ALL appear in the header
+# (case-insensitive). Adjust keywords here if column names change in future sheets.
+COLUMN_MAP = {
+    'no':                    ['no'],
+    'emp_no':                ['employe', 'no'],
+    'name':                  ['employe', 'name'],
+    'location':              ['location'],
+    'total_days':            ['total', 'days'],
+    'basic_salary':          ['basic', 'salary'],
+    'variable_allowance':    ['variable', 'attendance', 'allowance'],
+    'ot_hours':              ['over', 'time'],
+    'hard_works_allowance':  ['hard', 'works'],
+    'gang_leader_allowance': ['gang', 'leader'],
+    'gross_pay':             ['gross', 'pay'],
+    'epf_employee':          ['epf', 'employee'],
+    'stamp_duty':            ['stamp'],
+    'net_salary':            ['net', 'salary'],
+    'epf_employer':          ['epf', 'employer', '12'],
+    'etf_employer':          ['etf'],
+    'total_epf':             ['total', 'epf'],
+    'bank':                  ['name', 'bank'],
+    'branch':                ['branch'],
+    'account_no':            ['account'],
+    'nic':                   ['nic'],
+    'tel':                   ['tel'],
+    'transaction_id':        ['transaction'],
+    'payment_date':          ['payment', 'date'],
+}
+
+def find_header_row_and_map(ws):
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=20, values_only=True), 1):
+        non_none = [v for v in row if v is not None]
+        if len(non_none) < 6:
+            continue
+        col_index = {}
+        for key, keywords in COLUMN_MAP.items():
+            for col_i, cell_val in enumerate(row):
+                if cell_val is None:
+                    continue
+                cell_str = str(cell_val).lower()
+                if all(kw in cell_str for kw in keywords):
+                    if key not in col_index:
+                        col_index[key] = col_i
+        essential = {'name', 'gross_pay', 'net_salary', 'basic_salary'}
+        if essential.issubset(col_index.keys()):
+            print(f"Header found at row {row_idx}")
+            print("Mapped columns:", {k: v for k, v in col_index.items()})
+            return row_idx, col_index
+    raise ValueError("Could not find a valid header row. Check that the sheet has columns like 'Employe Name', 'Gross Pay', 'Net Salary', etc.")
+
+def extract_employees(ws, header_row_idx, col_index):
+    employees = []
+    for row in ws.iter_rows(min_row=header_row_idx + 2, max_row=ws.max_row, values_only=True):
+        def get(key):
+            idx = col_index.get(key)
+            return row[idx] if idx is not None and idx < len(row) else None
+        no = get('no')
+        if no is None:
+            continue
+        try:
+            no_int = int(str(no).strip())
+        except (ValueError, TypeError):
+            continue
+        employees.append({
+            'no': no_int, 'emp_no': get('emp_no'),
+            'name': str(get('name') or '').strip(),
+            'location': str(get('location') or '').strip(),
+            'total_days': get('total_days'), 'basic_salary': get('basic_salary'),
+            'variable_allowance': get('variable_allowance'), 'ot_hours': get('ot_hours'),
+            'hard_works_allowance': get('hard_works_allowance'),
+            'gang_leader_allowance': get('gang_leader_allowance'),
+            'gross_pay': get('gross_pay'), 'epf_employee': get('epf_employee'),
+            'stamp_duty': get('stamp_duty'), 'net_salary': get('net_salary'),
+            'epf_employer': get('epf_employer'), 'etf_employer': get('etf_employer'),
+            'total_epf': get('total_epf'), 'bank': str(get('bank') or '').strip(),
+            'branch': str(get('branch') or '').strip(), 'account_no': get('account_no'),
+            'nic': get('nic'), 'tel': get('tel'),
+            'transaction_id': get('transaction_id'), 'payment_date': get('payment_date'),
+        })
+    return employees
+
+def extract_date_range(ws, max_rows=30):
+    # Match ranges like 2026.02.28 -2026.03.06 or 2026-02-28 - 2026-03-06
+    range_pattern = re.compile(
+        r"(\d{4}[./-]\d{1,2}[./-]\d{1,2})\s*-\s*(\d{4}[./-]\d{1,2}[./-]\d{1,2})"
+    )
+    for row in ws.iter_rows(min_row=1, max_row=max_rows, values_only=True):
+        for val in row:
+            if val is None:
+                continue
+            cell_str = str(val).strip()
+            if not cell_str:
+                continue
+            match = range_pattern.search(cell_str)
+            if match:
+                return f"{match.group(1)} - {match.group(2)}"
+    return "N/A"
+
+def fmt(val):
+    if val is None: return "0.00"
+    try: return f"{float(val):,.2f}"
+    except: return str(val)
+
+def draw_payslip(c, emp, date_range):
+    W, H = A4
+    margin = 15 * mm
+    w = W - 2 * margin
+    y = H - margin
+
+    c.setFillColor(colors.HexColor("#1a3a5c"))
+    c.rect(margin, y - 22*mm, w, 22*mm, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(W/2, y - 10*mm, "ReliaPro Manpower")
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(W/2, y - 16*mm, "Siyambalanduwa")
+    y -= 24*mm
+
+    c.setFillColor(colors.HexColor("#2e6da4"))
+    c.rect(margin, y - 9*mm, w, 9*mm, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawCentredString(W/2, y - 6*mm, f"PAY SLIP  |  Period: {date_range}")
+    y -= 11*mm
+
+    c.setStrokeColor(colors.HexColor("#2e6da4"))
+    c.setLineWidth(0.5)
+    c.setFillColor(colors.HexColor("#f0f5fb"))
+    c.rect(margin, y - 28*mm, w, 28*mm, fill=1, stroke=1)
+
+    lx = margin + 4*mm
+    rx = margin + w/2 + 2*mm
+
+    def info_row(label, value, x, row_y):
+        c.setFont("Helvetica-Bold", 8); c.setFillColor(colors.HexColor("#555555"))
+        c.drawString(x, row_y, label)
+        c.setFont("Helvetica", 8); c.setFillColor(colors.black)
+        c.drawString(x + 28*mm, row_y, str(value) if value else "-")
+
+    info_row("Employee Name", emp['name'], lx, y - 7*mm)
+    info_row("Employee No.", emp['emp_no'], lx, y - 13*mm)
+    info_row("NIC Number", emp['nic'], lx, y - 19*mm)
+    info_row("Location", emp['location'] or "Siyambalanduwa", lx, y - 25*mm)
+    info_row("Bank", emp['bank'], rx, y - 7*mm)
+    info_row("Branch", emp['branch'], rx, y - 13*mm)
+    info_row("Account No.", emp['account_no'], rx, y - 19*mm)
+    info_row("Payment Date", emp['payment_date'], rx, y - 25*mm)
+    y -= 30*mm
+
+    def section_header(label, sy):
+        c.setFillColor(colors.HexColor("#2e6da4"))
+        c.rect(margin, sy - 7*mm, w, 7*mm, fill=1, stroke=0)
+        c.setFillColor(colors.white); c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin + 3*mm, sy - 4.5*mm, label)
+        return sy - 7*mm
+
+    def table_row(label, value, sy, shade=False):
+        row_h = 6.5*mm
+        if shade:
+            c.setFillColor(colors.HexColor("#f7f9fc"))
+            c.rect(margin, sy - row_h, w, row_h, fill=1, stroke=0)
+        c.setStrokeColor(colors.HexColor("#dddddd")); c.setLineWidth(0.3)
+        c.line(margin, sy - row_h, margin + w, sy - row_h)
+        c.setFont("Helvetica", 8.5); c.setFillColor(colors.HexColor("#333333"))
+        c.drawString(margin + 3*mm, sy - 4.5*mm, label)
+        c.setFont("Helvetica-Bold", 8.5); c.setFillColor(colors.black)
+        c.drawRightString(margin + w - 3*mm, sy - 4.5*mm, f"LKR {value}")
+        return sy - row_h
+
+    y = section_header("EARNINGS", y)
+    y = table_row("Basic Salary", fmt(emp['basic_salary']), y, True)
+    y = table_row("Variable Attendance Allowance", fmt(emp['variable_allowance']), y, False)
+    y = table_row(f"Variable Hard Works Allowance  (OT: {emp['ot_hours'] or 0} hrs)", fmt(emp['hard_works_allowance']), y, True)
+    if emp['gang_leader_allowance'] and float(emp['gang_leader_allowance'] or 0) > 0:
+        y = table_row("Variable Allowance (Gang Leader)", fmt(emp['gang_leader_allowance']), y, False)
+
+    c.setFillColor(colors.HexColor("#e8f0fb"))
+    c.rect(margin, y - 7*mm, w, 7*mm, fill=1, stroke=0)
+    c.setStrokeColor(colors.HexColor("#2e6da4")); c.setLineWidth(0.8)
+    c.rect(margin, y - 7*mm, w, 7*mm, fill=0, stroke=1)
+    c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.HexColor("#1a3a5c"))
+    c.drawString(margin + 3*mm, y - 4.5*mm, "GROSS PAY")
+    c.drawRightString(margin + w - 3*mm, y - 4.5*mm, f"LKR {fmt(emp['gross_pay'])}")
+    y -= 9*mm
+
+    y = section_header("DEDUCTIONS", y)
+    y = table_row("EPF Employee Contribution (8%)", fmt(emp['epf_employee']), y, True)
+    y = table_row("Stamp Duty", fmt(emp['stamp_duty']), y, False)
+
+    c.setFillColor(colors.HexColor("#1a3a5c"))
+    c.rect(margin, y - 8*mm, w, 8*mm, fill=1, stroke=0)
+    c.setFont("Helvetica-Bold", 10); c.setFillColor(colors.white)
+    c.drawString(margin + 3*mm, y - 5.5*mm, "NET SALARY")
+    c.drawRightString(margin + w - 3*mm, y - 5.5*mm, f"LKR {fmt(emp['net_salary'])}")
+    y -= 10*mm
+
+    y = section_header("EPF / ETF INFORMATION", y)
+    y = table_row("EPF Employer Contribution (12%)", fmt(emp['epf_employer']), y, True)
+    y = table_row("ETF Employer Contribution (3%)", fmt(emp['etf_employer']), y, False)
+    y = table_row("Total EPF Contribution (20%)", fmt(emp['total_epf']), y, True)
+    y -= 3*mm
+
+    if emp['transaction_id']:
+        c.setFont("Helvetica", 7.5); c.setFillColor(colors.HexColor("#777777"))
+        c.drawString(margin, y - 4*mm, f"Transaction ID: {emp['transaction_id']}")
+        y -= 6*mm
+
+    y -= 5*mm
+    sig_y = y - 8*mm
+    c.setStrokeColor(colors.HexColor("#999999")); c.setLineWidth(0.5)
+    c.line(margin, sig_y, margin + 55*mm, sig_y)
+    c.line(margin + w - 55*mm, sig_y, margin + w, sig_y)
+    c.setFont("Helvetica", 7.5); c.setFillColor(colors.HexColor("#555555"))
+    c.drawCentredString(margin + 27*mm, sig_y - 4*mm, "Employee Signature")
+    c.drawCentredString(margin + w - 27*mm, sig_y - 4*mm, "Managing Director Signature")
+
+    c.setFillColor(colors.HexColor("#1a3a5c"))
+    c.rect(margin, margin, w, 6*mm, fill=1, stroke=0)
+    c.setFillColor(colors.white); c.setFont("Helvetica", 7)
+    c.drawCentredString(W/2, margin + 2*mm, "Reg No: ++++++++ | This is a computer generated pay slip")
+
+def generate_payslips(excel_file, output_pdf):
+    wb = openpyxl.load_workbook(excel_file, data_only=True)
+    ws = wb.active
+    date_range = extract_date_range(ws)
+    print(f"Extracted date range: {date_range}")
+
+    header_row_idx, col_index = find_header_row_and_map(ws)
+    employees = extract_employees(ws, header_row_idx, col_index)
+    print(f"Found {len(employees)} employees")
+
+    c = canvas.Canvas(output_pdf, pagesize=A4)
+    for emp in employees:
+        draw_payslip(c, emp, date_range)
+        c.showPage()
+    c.save()
+
+    print(f"Done — {len(employees)} payslips saved to {output_pdf}")
+    return len(employees), date_range
+
+
+def main():
+    excel_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_EXCEL_FILE
+    output_pdf = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_OUTPUT_PDF
+    generate_payslips(excel_file, output_pdf)
+
+
+if __name__ == "__main__":
+    main()
