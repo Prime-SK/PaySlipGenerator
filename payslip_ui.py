@@ -1,13 +1,20 @@
 import os
 import json
 import subprocess
+import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
 from n_payslip import generate_payslips
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+def get_app_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+CONFIG_FILE = os.path.join(get_app_dir(), 'config.json')
 
 def load_config():
     """Load registration number from config.json"""
