@@ -60,22 +60,136 @@ def find_header_row_and_map(ws):
             return row_idx, col_index
     raise ValueError("Could not find a valid header row. Check that the sheet has columns like 'Employe Name', 'Gross Pay', 'Net Salary', etc.")
 
+def parse_int_like(value):
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return None
+
+    try:
+        return int(text)
+    except (ValueError, TypeError):
+        try:
+            as_float = float(text)
+            return int(as_float) if as_float.is_integer() else None
+        except (ValueError, TypeError):
+            return None
+
+def parse_float_like(value, default=None):
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return default
+
+    try:
+        return float(text)
+    except (ValueError, TypeError):
+        return default
+
+def is_blank(value):
+    return value is None or str(value).strip() == ""
+
+def build_validation_report(summary):
+    lines = [
+        "# Payslip Validation Report",
+        "",
+        f"- Source file: {summary['excel_file']}",
+        f"- Output PDF: {summary['output_pdf']}",
+        f"- Date range: {summary['date_range']}",
+        f"- Rows scanned: {summary['rows_scanned']}",
+        f"- Candidate rows: {summary['candidate_rows']}",
+        f"- Payslips generated: {summary['employees_processed']}",
+        f"- Validation issues: {len(summary['issues'])}",
+        "",
+    ]
+
+    if summary['issues']:
+        lines.append("## Issues")
+        lines.append("")
+        lines.append("| Row | Field | Reason | Raw Value |")
+        lines.append("|---|---|---|---|")
+        for issue in summary['issues']:
+            raw_text = str(issue['raw_value']).replace("|", "\\|")
+            lines.append(
+                f"| {issue['row']} | {issue['field']} | {issue['reason']} | {raw_text} |"
+            )
+    else:
+        lines.append("No validation issues were detected.")
+
+    return "\n".join(lines) + "\n"
+
 def extract_employees(ws, header_row_idx, col_index):
     employees = []
-    for row in ws.iter_rows(min_row=header_row_idx + 2, max_row=ws.max_row, values_only=True):
+    issues = []
+    rows_scanned = 0
+    candidate_rows = 0
+
+    numeric_fields = [
+        'total_days', 'basic_salary', 'variable_allowance', 'ot_hours',
+        'hard_works_allowance', 'gang_leader_allowance', 'gross_pay',
+        'epf_employee', 'stamp_duty', 'net_salary', 'epf_employer',
+        'etf_employer', 'total_epf'
+    ]
+
+    for row_number, row in enumerate(
+        ws.iter_rows(min_row=header_row_idx + 2, max_row=ws.max_row, values_only=True),
+        start=header_row_idx + 2,
+    ):
+        rows_scanned += 1
+
         def get(key):
             idx = col_index.get(key)
             return row[idx] if idx is not None and idx < len(row) else None
-        no = get('no')
-        if no is None:
+
+        no_raw = get('no')
+        if not is_blank(no_raw):
+            candidate_rows += 1
+
+        no_int = parse_int_like(get('no'))
+        if no_int is None:
+            if not is_blank(no_raw):
+                issues.append({
+                    'row': row_number,
+                    'field': 'no',
+                    'reason': 'Invalid employee number (must be an integer)',
+                    'raw_value': no_raw,
+                })
             continue
-        try:
-            no_int = int(str(no).strip())
-        except (ValueError, TypeError):
-            continue
+
+        name = str(get('name') or '').strip()
+        if not name:
+            issues.append({
+                'row': row_number,
+                'field': 'name',
+                'reason': 'Missing employee name',
+                'raw_value': get('name'),
+            })
+
+        for field in numeric_fields:
+            raw_val = get(field)
+            if is_blank(raw_val):
+                continue
+            if parse_float_like(raw_val, default=None) is None:
+                issues.append({
+                    'row': row_number,
+                    'field': field,
+                    'reason': 'Expected numeric value',
+                    'raw_value': raw_val,
+                })
+
         employees.append({
             'no': no_int, 'emp_no': get('emp_no'),
-            'name': str(get('name') or '').strip(),
+            'name': name,
             'location': str(get('location') or '').strip(),
             'total_days': get('total_days'), 'basic_salary': get('basic_salary'),
             'variable_allowance': get('variable_allowance'), 'ot_hours': get('ot_hours'),
@@ -89,7 +203,7 @@ def extract_employees(ws, header_row_idx, col_index):
             'nic': get('nic'), 'tel': get('tel'),
             'transaction_id': get('transaction_id'), 'payment_date': get('payment_date'),
         })
-    return employees
+    return employees, issues, rows_scanned, candidate_rows
 
 def extract_date_range(ws, max_rows=30):
     # Match ranges like 2026.02.28 -2026.03.06 or 2026-02-28 - 2026-03-06
@@ -109,11 +223,12 @@ def extract_date_range(ws, max_rows=30):
     return "N/A"
 
 def fmt(val):
-    if val is None: return "0.00"
-    try: return f"{float(val):,.2f}"
-    except: return str(val)
+    as_num = parse_float_like(val, default=None)
+    if as_num is None:
+        return "0.00" if val is None else str(val)
+    return f"{as_num:,.2f}"
 
-def draw_payslip(c, emp, date_range):
+def draw_payslip(c, emp, date_range, reg_no="NOT SET"):
     W, H = A4
     margin = 15 * mm
     w = W - 2 * margin
@@ -183,7 +298,7 @@ def draw_payslip(c, emp, date_range):
     y = table_row("Basic Salary", fmt(emp['basic_salary']), y, True)
     y = table_row("Variable Attendance Allowance", fmt(emp['variable_allowance']), y, False)
     y = table_row(f"Variable Hard Works Allowance  (OT: {emp['ot_hours'] or 0} hrs)", fmt(emp['hard_works_allowance']), y, True)
-    if emp['gang_leader_allowance'] and float(emp['gang_leader_allowance'] or 0) > 0:
+    if parse_float_like(emp['gang_leader_allowance'], default=0.0) > 0:
         y = table_row("Variable Allowance (Gang Leader)", fmt(emp['gang_leader_allowance']), y, False)
 
     c.setFillColor(colors.HexColor("#e8f0fb"))
@@ -229,26 +344,44 @@ def draw_payslip(c, emp, date_range):
     c.setFillColor(colors.HexColor("#1a3a5c"))
     c.rect(margin, margin, w, 6*mm, fill=1, stroke=0)
     c.setFillColor(colors.white); c.setFont("Helvetica", 7)
-    c.drawCentredString(W/2, margin + 2*mm, "Reg No: ++++++++ | This is a computer generated pay slip")
+    c.drawCentredString(W/2, margin + 2*mm, f"Reg No: {reg_no} | This is a computer generated pay slip")
 
-def generate_payslips(excel_file, output_pdf):
+def generate_payslips(excel_file, output_pdf, write_validation_report=True, reg_no="NOT SET"):
     wb = openpyxl.load_workbook(excel_file, data_only=True)
     ws = wb.active
     date_range = extract_date_range(ws)
     print(f"Extracted date range: {date_range}")
 
     header_row_idx, col_index = find_header_row_and_map(ws)
-    employees = extract_employees(ws, header_row_idx, col_index)
+    employees, issues, rows_scanned, candidate_rows = extract_employees(ws, header_row_idx, col_index)
     print(f"Found {len(employees)} employees")
 
     c = canvas.Canvas(output_pdf, pagesize=A4)
     for emp in employees:
-        draw_payslip(c, emp, date_range)
+        draw_payslip(c, emp, date_range, reg_no)
         c.showPage()
     c.save()
 
+    summary = {
+        'excel_file': excel_file,
+        'output_pdf': output_pdf,
+        'date_range': date_range,
+        'rows_scanned': rows_scanned,
+        'candidate_rows': candidate_rows,
+        'employees_processed': len(employees),
+        'issues': issues,
+        'validation_report_path': None,
+    }
+
+    if write_validation_report:
+        report_path = f"{output_pdf}.validation_report.md"
+        with open(report_path, "w", encoding="utf-8") as fp:
+            fp.write(build_validation_report(summary))
+        summary['validation_report_path'] = report_path
+        print(f"Validation report saved to {report_path}")
+
     print(f"Done — {len(employees)} payslips saved to {output_pdf}")
-    return len(employees), date_range
+    return summary
 
 
 def main():

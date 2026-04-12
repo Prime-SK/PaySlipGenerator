@@ -34,3 +34,4 @@ Thumbs.db
 *.xlsx
 generate_payslips.py
 script.py
+_test/

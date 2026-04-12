@@ -1,199 +1,218 @@
-# PaySlipGen
+# PaySlip Generator
 
-PaySlipGen is a Windows payslip generator that reads employee data from an Excel workbook and exports one PDF payslip per employee.
-
-The project has two entry points:
-
-- [n_payslip.py](n_payslip.py) for the core generation logic and command-line usage
-- [payslip_ui.py](payslip_ui.py) for the desktop GUI
+A professional payslip generation tool for ReliaPro Manpower that converts Excel employee data into formatted PDF payslips.
 
 ## Features
 
-- Reads an `.xlsx` workbook and automatically detects the header row
-- Extracts the payslip date range from the top rows of the sheet
-- Generates a formatted PDF payslip for each employee
-- Provides a simple Windows UI to choose the Excel file and destination PDF
-- Can be packaged as a standalone `.exe` with PyInstaller
-
-## Repository Layout
-
-- [n_payslip.py](n_payslip.py) - core Excel-to-PDF generation script
-- [payslip_ui.py](payslip_ui.py) - Tkinter desktop UI
-- [PaySlipGen.spec](PaySlipGen.spec) - PyInstaller build file generated during packaging
-- [dist/PaySlipGen.exe](dist/PaySlipGen.exe) - built executable output
-
-## Requirements
-
-- Windows 10 or Windows 11
-- Python 3.13 or newer
-- `pip`
-- An Excel workbook in `.xlsx` format
-
-Python packages used by the project:
-
-- `openpyxl`
-- `reportlab`
-- `pyinstaller` for building the executable
+- 📊 Excel to PDF conversion with professional formatting
+- ✅ Automatic data validation with detailed error reporting
+- 📝 Markdown validation reports alongside PDFs
+- ⚙️ Configurable registration number
+- 🎯 Real-time validation diagnostics in the UI
+- 🔒 Safe numeric parsing and data integrity checks
 
 ## Quick Start
 
-If you already have Python installed, you can install the dependencies and run the GUI directly.
+### Using the Executable
 
-### 1. Open PowerShell in the project folder
+1. Extract `dist/PaySlipGen.exe` to your desired location
+2. Double-click `PaySlipGen.exe` to launch the application
+3. Click **⚙ Settings** to configure your company registration number (required before first use)
+4. Select your Excel file (source payroll data)
+5. Choose where to save the PDF output
+6. Click **Generate Payslips**
+7. Review the validation report for any data quality issues
+
+### From Source (Development)
+
+Open PowerShell in the project folder:
 
 ```powershell
 cd D:\Projects\PaySlipGen
-```
 
-### 2. Create a virtual environment
-
-```powershell
-python -m venv .venv
-```
-
-### 3. Activate the virtual environment
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell blocks script activation, run this once in the same window:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-Then activate again.
-
-### 4. Install dependencies
-
-```powershell
+# Install dependencies
 pip install openpyxl reportlab pyinstaller
+
+# Run the UI
+python payslip_ui.py
 ```
 
-## How to Use the GUI
+## Building the Executable
 
-Run the desktop app with:
+After modifying the UI (`payslip_ui.py`) or business logic (`n_payslip.py`), rebuild the executable:
 
 ```powershell
-python .\payslip_ui.py
+cd D:\Projects\PaySlipGen
+
+# Clean rebuild with minimal file size
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name PaySlipGen payslip_ui.py
 ```
 
-In the window:
+The new executable will be created at: `dist\PaySlipGen.exe`
 
-1. Click `Browse` and select an existing `.xlsx` file.
-2. Click `Save As` and choose where to save the output PDF.
-3. Click `Generate Payslips`.
+**Note:** Close `PaySlipGen.exe` if it's already running before rebuild.
 
-The app will generate a PDF with one payslip per employee.
+### Build Command Breakdown
 
-Branding shown in the UI footer:
+| Flag | Purpose |
+|------|---------|
+| `--noconfirm` | Skip confirmation prompts |
+| `--clean` | Remove previous build artifacts |
+| `--onefile` | Create a single executable (vs. folder) |
+| `--windowed` | Hide console window (GUI-only) |
+| `--name PaySlipGen` | Output executable name |
+| `payslip_ui.py` | Entry point (UI module) |
 
-- `Shakila Thathsara 2026`
+## Configuration
 
-## How to Run the Script from the Command Line
+The application stores the registration number in `config.json`:
 
-The core generator can also be run without the GUI.
+```json
+{
+  "reg_no": "YOUR_COMPANY_REG_NUMBER"
+}
+```
 
-### Basic usage
+You can also:
+1. Click **⚙ Settings** button in the UI to update the registration number
+2. Edit `config.json` directly with a text editor
+
+The registration number will appear on all generated payslips.
+
+## Command-Line Usage
+
+The core generator can also be run directly from PowerShell:
 
 ```powershell
-python .\n_payslip.py "D:\path\to\source.xlsx" "D:\path\to\output.pdf"
+python n_payslip.py <input.xlsx> <output.pdf>
 ```
 
-### Example
+Example:
 
 ```powershell
-python .\n_payslip.py ".\Paid Labour salary 2026 . 02 . 28- 2026 .03.06.xlsx" new_payslip.pdf
+python n_payslip.py ".\employee_data.xlsx" ".\payslips.pdf"
 ```
 
-If you omit the arguments, the script falls back to its default paths inside `n_payslip.py`.
+## Excel File Format
 
-## How the Date Range Is Extracted
+Your Excel file must contain:
+- **Column headers** identifying employee data (Employee Name, Gross Pay, Net Salary, Account Number, etc.)
+- **Date range** (format: `YYYY.MM.DD - YYYY.MM.DD` or `YYYY-MM-DD - YYYY-MM-DD`) somewhere in the top rows
+- **Data rows** with employee information
 
-The script scans the top rows of the worksheet and looks for date ranges in text such as:
+See `111.xlsx` or `222.xlsx` for examples.
 
-```text
-ATTENDANCE SHEET - Date:      2026.02.28 -2026.03.06
+## Output Files
+
+For each generation, the system creates:
+
+1. **PDF file** - Formatted payslips (one page per employee)
+2. **Markdown validation report** - Issues found during generation
+
+Example: `payslips.pdf` creates `payslips.pdf.validation_report.md`
+
+## Validation & Issue Reporting
+
+The system validates:
+- Employee numbers (must be integers)
+- Numeric fields (salary, allowances, deductions)
+- Required fields (name, gross pay, net salary)
+- Data type consistency
+
+Issues are logged with:
+- Row number
+- Field name
+- Reason for the issue
+- Raw value from Excel
+
+## Project Structure
+
 ```
-
-It supports common range styles like:
-
-- `2026.02.28 -2026.03.06`
-- `2026-02-28 - 2026-03-06`
-- `2026/02/28 - 2026/03/06`
-
-## How to Build the EXE
-
-The project uses PyInstaller to package the GUI into a single Windows executable.
-
-### 1. Install PyInstaller
-
-```powershell
-pip install pyinstaller
+PaySlipGen/
+├── payslip_ui.py           # Tkinter GUI application
+├── n_payslip.py            # Core PDF generation & validation logic
+├── config.json             # User settings (registration number)
+├── dist/
+│   └── PaySlipGen.exe     # Compiled executable
+├── build/                  # Temporary build files (PyInstaller)
+└── README.md              # This file
 ```
-
-### 2. Build the executable
-
-Run this from the project folder:
-
-```powershell
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name PaySlipGen .\payslip_ui.py
-```
-
-### 3. Find the output
-
-When the build completes, the executable is created at:
-
-```text
-dist\PaySlipGen.exe
-```
-
-## Rebuilding After Changes
-
-If you change the UI or the generator code, rebuild the executable with the same PyInstaller command.
-
-If `dist\PaySlipGen.exe` is already open, close it first. Windows will lock the file and PyInstaller may fail to overwrite it.
 
 ## Troubleshooting
 
-### The app says `Could not find a valid header row`
+### "Registration number cannot be empty"
+- Click **⚙ Settings** and enter your company's registration number
 
-Make sure the workbook contains the employee table and the header row includes columns similar to:
+### PDF generated but validation report shows issues
+- Check the `.md` report file for details
+- Verify column names match expected format
+- Ensure date range is present in the Excel file
 
-- Employee Name
-- Gross Pay
-- Net Salary
-- Basic Salary
+### Executable won't start
+- Ensure Windows Defender or antivirus allows the `.exe`
+- Verify `config.json` is in the same folder as `PaySlipGen.exe`
+- Run from Command Prompt to see error messages
 
-### The date range shows `N/A`
+### "Could not find a valid header row"
+- Verify the Excel file contains columns like:
+  - Employee Name
+  - Gross Pay
+  - Net Salary
+  - Basic Salary
+  - Bank / Branch / Account Number
 
-Check that the workbook contains a date range in the top rows above the table headers.
+### PyInstaller build fails
+- Close any running `PaySlipGen.exe` first
+- Ensure all dependencies are installed: `pip install openpyxl reportlab pyinstaller`
+- Try running: `pip install --upgrade pyinstaller`
 
-### The executable build fails with a file lock error
+## Requirements
 
-Close any running copy of `PaySlipGen.exe` and rebuild.
+- **Windows 10 or later** (Windows 11 recommended)
+- **Python 3.13** (for development)
+- Python packages:
+  - `openpyxl` – Excel reading
+  - `reportlab` – PDF generation
+  - `pyinstaller` – Executable packaging
 
-### PowerShell blocks activation of the virtual environment
+## Development Notes
 
-Run:
+### Key Functions
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
+**payslip_ui.py**
+- `PaySlipApp` – Main GUI class
+- `load_config()` / `save_config()` – Configuration file management
+- `show_settings()` – Registration number configuration dialog
 
-## Notes
+**n_payslip.py**
+- `generate_payslips()` – Main entry point for PDF generation
+- `extract_employees()` – Parse Excel with validation
+- `draw_payslip()` – ReportLab canvas drawing
+- `parse_int_like()` / `parse_float_like()` – Safe numeric conversion
 
-- The project is optimized for Windows desktop use.
-- The UI is intentionally simple and focused on file selection and PDF generation.
-- If you want a custom app icon, a versioned installer, or an MSI package, those can be added later.
+### Code Quality
 
-## Build Summary
+All code maintains:
+- Type safety for numeric conversions
+- Row-level validation issue tracking
+- Clean separation of UI and business logic
+- Backward compatibility with existing Excel formats
 
-The standard build flow is:
+## Branding
 
-1. Install Python dependencies
-2. Run the GUI with `python .\payslip_ui.py`
-3. Validate the output PDF
-4. Package the app with PyInstaller
-5. Use `dist\PaySlipGen.exe`
+The application footer displays: **Shakila Thathsara**
+
+Payslips include ReliaPro Manpower branding and the configured registration number.
+
+## Version History
+
+**Current (2026-04-08)**
+- ✅ Settings button for registration number configuration
+- ✅ Config file storage (`config.json`)
+- ✅ Full validation diagnostics
+- ✅ Output panel showing run summary
+- ✅ Executable (21.5 MB)
+
+## Support
+
+For issues or questions, refer to the validation report generated alongside each PDF for detailed error information.
