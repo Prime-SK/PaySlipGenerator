@@ -1,5 +1,6 @@
 import os
 import json
+import subprocess
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
@@ -31,8 +32,8 @@ class PaySlipApp:
     def __init__(self, root):
         self.root = root
         self.root.title("ReliaPro Manpower - PaySlip Generator")
-        self.root.geometry("980x620")
-        self.root.minsize(980, 620)
+        self.root.geometry("980x700")
+        self.root.minsize(980, 700)
         self.root.resizable(False, False)
         self.root.configure(bg="#e8edf5")
 
@@ -52,24 +53,24 @@ class PaySlipApp:
 
         style.configure("App.TFrame", background="#e8edf5")
         style.configure("Hero.TFrame", background="#0f172a")
-        style.configure("Card.TFrame", background="#f9fbfd")
+        style.configure("Card.TFrame", background="#f9fbfd", relief="flat", borderwidth=1)
         style.configure("HeaderTitle.TLabel", background="#0f172a", foreground="#ffffff", font=("Segoe UI Semibold", 22))
         style.configure("HeaderSub.TLabel", background="#0f172a", foreground="#dbe4f0", font=("Segoe UI", 10))
         style.configure("FieldLabel.TLabel", background="#f9fbfd", foreground="#111827", font=("Segoe UI Semibold", 10))
         style.configure("Helper.TLabel", background="#f9fbfd", foreground="#5b6472", font=("Segoe UI", 9))
-        style.configure("Path.TEntry", fieldbackground="#ffffff", bordercolor="#d1d5db", foreground="#111827", padding=(10, 8))
+        style.configure("Path.TEntry", fieldbackground="#ffffff", bordercolor="#cfd8e3", foreground="#111827", padding=(12, 9), relief="flat")
         style.configure("Status.TLabel", background="#f9fbfd", foreground="#0f172a", font=("Segoe UI Semibold", 10))
         style.configure("Brand.TLabel", background="#f9fbfd", foreground="#6b7280", font=("Segoe UI", 9, "italic"))
         style.configure("PanelTitle.TLabel", background="#f9fbfd", foreground="#111827", font=("Segoe UI Semibold", 10))
-        style.configure("Pill.TLabel", background="#1d4ed8", foreground="#ffffff", font=("Segoe UI Semibold", 9), padding=(10, 4))
+        style.configure("Footer.TLabel", background="#e8edf5", foreground="#4b5563", font=("Segoe UI Semibold", 9))
 
         style.configure(
             "Primary.TButton",
-            font=("Segoe UI Semibold", 11),
-            padding=(18, 10),
+            font=("Segoe UI Semibold", 10),
+            padding=(14, 9),
             foreground="#ffffff",
             background="#0d6efd",
-            borderwidth=1,
+            borderwidth=0,
             relief="flat",
         )
         style.map(
@@ -80,11 +81,11 @@ class PaySlipApp:
 
         style.configure(
             "Secondary.TButton",
-            font=("Segoe UI", 9),
-            padding=(11, 7),
+            font=("Segoe UI Semibold", 10),
+            padding=(14, 9),
             foreground="#111827",
             background="#e7ebf2",
-            borderwidth=1,
+            borderwidth=0,
             relief="flat",
         )
         style.map(
@@ -95,16 +96,16 @@ class PaySlipApp:
         
         style.configure(
             "Settings.TButton",
-            font=("Segoe UI Semibold", 9),
-            padding=(12, 6),
+            font=("Segoe UI Semibold", 10),
+            padding=(14, 9),
             foreground="#ffffff",
-            background="#1f2937",
-            borderwidth=1,
+            background="#334155",
+            borderwidth=0,
             relief="flat",
         )
         style.map(
             "Settings.TButton",
-            background=[("active", "#374151"), ("!disabled", "#1f2937")],
+            background=[("active", "#475569"), ("!disabled", "#334155")],
             foreground=[("!disabled", "#ffffff")],
         )
 
@@ -121,47 +122,45 @@ class PaySlipApp:
         ttk.Label(hero_left, text="ReliaPro Manpower - PaySlip Generator", style="HeaderTitle.TLabel").pack(anchor="w")
         ttk.Label(
             hero_left,
-            text="Generate polished employee payslips from Excel with a clean, guided workflow.",
+            text="Generate employee payslips from Excel.",
             style="HeaderSub.TLabel",
         ).pack(anchor="w", pady=(5, 0))
 
         hero_right = ttk.Frame(hero, style="Hero.TFrame")
         hero_right.pack(side="right", anchor="ne", padx=(16, 0))
         
-        self.settings_btn = ttk.Button(hero_right, text="Settings", style="Settings.TButton", command=self.show_settings)
-        self.settings_btn.pack(side="left", padx=(0, 12))
-        
-        ttk.Label(hero_right, text="Shakila Thathsara", style="Pill.TLabel").pack(side="left")
+        self.settings_btn = ttk.Button(hero_right, text="⚙ Reg No", width=13, style="Settings.TButton", command=self.show_settings)
+        self.settings_btn.pack(side="right")
 
         body = ttk.Frame(app, style="App.TFrame")
-        body.pack(fill="both", expand=True, pady=(16, 0))
+        body.pack(fill="both", expand=True, pady=(14, 0))
 
-        left_panel = ttk.Frame(body, style="Card.TFrame", padding=20)
+        left_panel = ttk.Frame(body, style="Card.TFrame", padding=14)
         left_panel.pack(fill="both", expand=True)
 
         top_accent = tk.Frame(left_panel, bg="#2563eb", height=4)
-        top_accent.pack(fill="x", pady=(0, 16))
+        top_accent.pack(fill="x", pady=(0, 12))
 
         ttk.Label(left_panel, text="Source Excel (.xlsx)", style="FieldLabel.TLabel").pack(anchor="w")
-        ttk.Label(left_panel, text="Choose the workbook that contains the employee sheet.", style="Helper.TLabel").pack(anchor="w", pady=(2, 8))
+        ttk.Label(left_panel, text="Choose the workbook that contains the employee sheet.", style="Helper.TLabel").pack(anchor="w", pady=(2, 6))
         row1 = ttk.Frame(left_panel, style="Card.TFrame")
-        row1.pack(fill="x", pady=(0, 14))
+        row1.pack(fill="x", pady=(0, 12))
         self.excel_entry = ttk.Entry(row1, textvariable=self.excel_path, style="Path.TEntry")
         self.excel_entry.pack(side="left", fill="x", expand=True)
-        self.pick_excel_btn = ttk.Button(row1, text="Browse", style="Secondary.TButton", command=self.browse_excel)
+        self.pick_excel_btn = ttk.Button(row1, text="📂 Browse", width=13, style="Secondary.TButton", command=self.browse_excel)
         self.pick_excel_btn.pack(side="left", padx=(10, 0))
 
         ttk.Label(left_panel, text="Destination PDF", style="FieldLabel.TLabel").pack(anchor="w")
-        ttk.Label(left_panel, text="Pick where the finished payslips should be saved.", style="Helper.TLabel").pack(anchor="w", pady=(2, 8))
+        ttk.Label(left_panel, text="Pick where the finished payslips should be saved.", style="Helper.TLabel").pack(anchor="w", pady=(2, 6))
         row2 = ttk.Frame(left_panel, style="Card.TFrame")
-        row2.pack(fill="x", pady=(0, 18))
+        row2.pack(fill="x", pady=(0, 12))
         self.output_entry = ttk.Entry(row2, textvariable=self.output_path, style="Path.TEntry")
         self.output_entry.pack(side="left", fill="x", expand=True)
-        self.pick_output_btn = ttk.Button(row2, text="Save As", style="Secondary.TButton", command=self.choose_output)
+        self.pick_output_btn = ttk.Button(row2, text="💾 Save As", width=13, style="Secondary.TButton", command=self.choose_output)
         self.pick_output_btn.pack(side="left", padx=(10, 0))
 
         action_bar = ttk.Frame(left_panel, style="Card.TFrame")
-        action_bar.pack(fill="x", pady=(10, 0))
+        action_bar.pack(fill="x", pady=(6, 0))
 
         status_block = ttk.Frame(action_bar, style="Card.TFrame")
         status_block.pack(side="left", fill="x", expand=True)
@@ -172,13 +171,13 @@ class PaySlipApp:
             style="Helper.TLabel",
         ).pack(anchor="w", pady=(4, 0))
 
-        self.generate_btn = ttk.Button(action_bar, text="Generate Payslips", style="Primary.TButton", command=self.generate)
+        self.generate_btn = ttk.Button(action_bar, text="▶ Generate Payslips", width=20, style="Primary.TButton", command=self.generate)
         self.generate_btn.pack(side="right")
 
         self._set_initial_state()
 
         output_panel = ttk.Frame(left_panel, style="Card.TFrame")
-        output_panel.pack(fill="both", expand=True, pady=(16, 0))
+        output_panel.pack(fill="both", expand=True, pady=(12, 0))
         ttk.Label(output_panel, text="Output Summary", style="PanelTitle.TLabel").pack(anchor="w")
         ttk.Label(
             output_panel,
@@ -191,11 +190,11 @@ class PaySlipApp:
 
         self.output_box = tk.Text(
             output_wrap,
-            height=14,
+            height=8,
             wrap="word",
             bg="#ffffff",
             fg="#0f172a",
-            relief="solid",
+            relief="flat",
             borderwidth=1,
             font=("Consolas", 10),
         )
@@ -206,9 +205,9 @@ class PaySlipApp:
         self.output_box.configure(yscrollcommand=output_scroll.set)
         self._set_output_panel(self.output_text.get())
 
-        footer = ttk.Frame(left_panel, style="Card.TFrame")
-        footer.pack(fill="x", pady=(16, 0))
-        ttk.Label(footer, text="Shakila Thathsara", style="Brand.TLabel").pack(anchor="e")
+        footer = ttk.Frame(app, style="App.TFrame")
+        footer.pack(side="bottom", fill="x", pady=(6, 0))
+        ttk.Label(footer, text="Developed by Shakila Thathsara", style="Footer.TLabel").pack(anchor="e")
 
     def _set_output_panel(self, text):
         self.output_box.config(state="normal")
@@ -286,8 +285,58 @@ class PaySlipApp:
             messagebox.showinfo("Success", "Registration number updated successfully.")
             dialog.destroy()
         
-        ttk.Button(button_frame, text="Cancel", style="Secondary.TButton", command=dialog.destroy).pack(side="right")
-        ttk.Button(button_frame, text="Save Settings", style="Primary.TButton", command=save_settings).pack(side="right", padx=(0, 8))
+        ttk.Button(button_frame, text="✖ Cancel", width=13, style="Secondary.TButton", command=dialog.destroy).pack(side="right")
+        ttk.Button(button_frame, text="✔ Save", width=13, style="Primary.TButton", command=save_settings).pack(side="right", padx=(0, 8))
+
+    def _open_output_folder(self, output_pdf):
+        abs_pdf = os.path.abspath(output_pdf)
+        folder = os.path.dirname(abs_pdf)
+        if not os.path.isdir(folder):
+            messagebox.showerror("Folder not found", f"Could not find folder:\n{folder}")
+            return
+        try:
+            subprocess.Popen(f'explorer /select,"{abs_pdf}"')
+        except Exception:
+            try:
+                os.startfile(folder)
+            except Exception as exc:
+                messagebox.showerror("Open Folder Failed", str(exc))
+
+    def _show_success_dialog(self, summary, output_pdf):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Generation Complete")
+        dialog.geometry("520x260")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg="#e8edf5")
+
+        frame = ttk.Frame(dialog, style="Card.TFrame", padding=20)
+        frame.pack(fill="both", expand=True, padx=16, pady=16)
+
+        ttk.Label(frame, text="Payslips Generated Successfully", style="PanelTitle.TLabel").pack(anchor="w")
+        ttk.Label(
+            frame,
+            text=(
+                f"Generated: {summary.get('employees_processed', 0)} payslips\n"
+                f"Validation issues: {len(summary.get('issues', []))}\n"
+                f"Period: {summary.get('date_range', '-')}\n\n"
+                f"Saved to:\n{output_pdf}"
+            ),
+            style="Helper.TLabel",
+            justify="left",
+        ).pack(anchor="w", pady=(8, 16))
+
+        button_frame = ttk.Frame(frame, style="Card.TFrame")
+        button_frame.pack(fill="x")
+        ttk.Button(button_frame, text="Close", width=13, style="Secondary.TButton", command=dialog.destroy).pack(side="right")
+        ttk.Button(
+            button_frame,
+            text="📂 Open Folder",
+            width=13,
+            style="Primary.TButton",
+            command=lambda: self._open_output_folder(output_pdf),
+        ).pack(side="right", padx=(0, 8))
     
     def _set_initial_state(self):
         self.generate_btn.config(state="disabled")
@@ -357,14 +406,7 @@ class PaySlipApp:
             issues_count = len(summary.get('issues', []))
             self.status_text.set(f"Done: {count} payslips generated")
             self._set_output_panel(self._format_run_summary(summary))
-
-            messagebox.showinfo(
-                "Success",
-                f"Generated {count} payslips.\n"
-                f"Validation issues: {issues_count}\n"
-                f"Period: {summary.get('date_range', '-')}\n\n"
-                f"Saved to:\n{output}",
-            )
+            self._show_success_dialog(summary, output)
         except Exception as exc:
             self.status_text.set("Failed")
             self._set_output_panel(f"Run failed:\n{exc}")

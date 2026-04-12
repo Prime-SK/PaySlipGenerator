@@ -348,7 +348,22 @@ def draw_payslip(c, emp, date_range, reg_no="NOT SET"):
 
 def generate_payslips(excel_file, output_pdf, write_validation_report=True, reg_no="NOT SET"):
     wb = openpyxl.load_workbook(excel_file, data_only=True)
-    ws = wb.active
+
+    # Try to find the payroll sheet — search all sheets for the one with the header
+    ws = None
+    for sheet_name in wb.sheetnames:
+        candidate = wb[sheet_name]
+        for row in candidate.iter_rows(min_row=1, max_row=20, values_only=True):
+            non_none = [v for v in row if v is not None]
+            if len(non_none) >= 6 and any('employe' in str(v).lower() for v in non_none if v):
+                ws = candidate
+                break
+        if ws:
+            break
+
+    if ws is None:
+        ws = wb.active  # fallback
+        
     date_range = extract_date_range(ws)
     print(f"Extracted date range: {date_range}")
 
